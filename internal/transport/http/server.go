@@ -9,6 +9,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/helmet"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 
 	"github.com/ramisoul84/rami-server/internal/config"
@@ -57,7 +58,8 @@ func NewServer(cfg *config.Config, log *logger.Logger, h Handlers) *Server {
 
 	api := app.Group("/api/v1")
 
-	api.Post("/analytics/event", h.Event.Track)
+	// Public: the tracker sends a few events per minute per visitor.
+	api.Post("/analytics/event", rateLimit(240, time.Minute), h.Event.Track)
 
 	return &Server{app: app, cfg: cfg, log: log}
 }
@@ -73,6 +75,18 @@ func (s *Server) Start() error {
 
 func (s *Server) Shutdown(ctx context.Context) error {
 	return s.app.ShutdownWithContext(ctx)
+}
+
+// rateLimit allows max requests per window from one client IP.
+func rateLimit(max int, window time.Duration) fiber.Handler {
+	return limiter.New(limiter.Config{
+		Max:          max,
+		Expiration:   window,
+		KeyGenerator: middleware.ClientIP,
+		LimitReached: func(c *fiber.Ctx) error {
+			return fiber.NewError(fiber.StatusTooManyRequests, "too many requests, try again later")
+		},
+	})
 }
 
 // errorHandler renders every error as JSON. Internal causes are logged, never sent.
@@ -122,6 +136,8 @@ func errorType(code int) string {
 		return "bad_request"
 	case code == fiber.StatusRequestEntityTooLarge:
 		return "payload_too_large"
+	case code == fiber.StatusTooManyRequests:
+		return "rate_limited"
 	case code >= 500:
 		return "internal"
 	default:
