@@ -1,0 +1,24 @@
+services:
+  rami-server:
+    build: .
+    image: rami-server:latest
+    container_name: rami-server
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      # Only the reverse proxy on this host should reach the API directly.
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./data:/app/data:ro
+      - ./logs:/app/logs
+    networks:
+      - platform-stack_backend
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  platform-stack_backend:
+    external: true

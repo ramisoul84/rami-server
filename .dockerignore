@@ -1,0 +1,15 @@
+# Only the Go sources are needed to build; keep secrets and data out of the build context.
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+bin/
+logs/
+data/
+tmp/
+*.md
+Makefile
+docker-compose.yml
+Dockerfile
+.dockerignore
