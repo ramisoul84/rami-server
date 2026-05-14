@@ -19,6 +19,7 @@ import (
 type App struct {
 	log    *logger.Logger
 	db     *database.Postgres
+	geo    service.GeoService
 	server *transporthttp.Server
 }
 
@@ -53,11 +54,22 @@ func New(cfg *config.Config) (*App, error) {
 		log.Info("migrations applied", "versions", applied)
 	}
 
+	// Geo is optional: without the MMDB file visits are stored without a country.
+	var geo service.GeoService
+	if cfg.Geo.MMDBPath != "" {
+		if g, err := service.NewGeoService(cfg.Geo.MMDBPath, log); err != nil {
+			log.Warn("geo service disabled", "err", err)
+		} else {
+			geo = g
+			log.Info("geo service enabled", "mmdb", cfg.Geo.MMDBPath)
+		}
+	}
+
 	eventRepo := repository.NewEventRepository(db.DB)
 
-	a := &App{log: log, db: db}
+	a := &App{log: log, db: db, geo: geo}
 	a.server = transporthttp.NewServer(cfg, log, transporthttp.Handlers{
-		Event: handler.NewEventHandler(service.NewEventService(eventRepo, nil, nil, log)),
+		Event: handler.NewEventHandler(service.NewEventService(eventRepo, nil, geo, log)),
 	})
 	return a, nil
 }
@@ -84,6 +96,9 @@ func (a *App) Shutdown(ctx context.Context) error {
 	var errs []error
 	if err := a.server.Shutdown(ctx); err != nil {
 		errs = append(errs, fmt.Errorf("http shutdown: %w", err))
+	}
+	if a.geo != nil {
+		_ = a.geo.Close()
 	}
 	if err := a.db.Close(); err != nil {
 		errs = append(errs, fmt.Errorf("db close: %w", err))
