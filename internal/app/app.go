@@ -13,6 +13,7 @@ import (
 	"github.com/ramisoul84/rami-server/internal/transport/http/handler"
 	"github.com/ramisoul84/rami-server/migrations"
 	"github.com/ramisoul84/rami-server/pkg/database"
+	"github.com/ramisoul84/rami-server/pkg/jwt"
 	"github.com/ramisoul84/rami-server/pkg/logger"
 )
 
@@ -54,6 +55,12 @@ func New(cfg *config.Config) (*App, error) {
 		log.Info("migrations applied", "versions", applied)
 	}
 
+	tokens, err := jwt.New(cfg.Auth.JWTSecret, cfg.Auth.AccessDuration, cfg.App.Name)
+	if err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("jwt: %w", err)
+	}
+
 	// Geo is optional: without the MMDB file visits are stored without a country.
 	var geo service.GeoService
 	if cfg.Geo.MMDBPath != "" {
@@ -66,9 +73,11 @@ func New(cfg *config.Config) (*App, error) {
 	}
 
 	eventRepo := repository.NewEventRepository(db.DB)
+	authService := service.NewAuthService(tokens, cfg.Auth.AdminUsername, cfg.Auth.AdminPasswordHash, log)
 
 	a := &App{log: log, db: db, geo: geo}
-	a.server = transporthttp.NewServer(cfg, log, transporthttp.Handlers{
+	a.server = transporthttp.NewServer(cfg, log, tokens, transporthttp.Handlers{
+		Auth:  handler.NewAuthHandler(authService),
 		Event: handler.NewEventHandler(service.NewEventService(eventRepo, nil, geo, log)),
 	})
 	return a, nil

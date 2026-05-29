@@ -12,6 +12,7 @@ require (
 	github.com/mssola/useragent v1.0.0
 	github.com/oschwald/geoip2-golang v1.13.0
 	github.com/valyala/fasthttp v1.51.0
+	golang.org/x/crypto v0.14.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
 

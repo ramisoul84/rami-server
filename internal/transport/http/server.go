@@ -15,6 +15,7 @@ import (
 	"github.com/ramisoul84/rami-server/internal/config"
 	"github.com/ramisoul84/rami-server/internal/transport/http/handler"
 	"github.com/ramisoul84/rami-server/internal/transport/http/middleware"
+	"github.com/ramisoul84/rami-server/pkg/jwt"
 	"github.com/ramisoul84/rami-server/pkg/logger"
 )
 
@@ -28,10 +29,11 @@ type Server struct {
 }
 
 type Handlers struct {
+	Auth  *handler.AuthHandler
 	Event *handler.EventHandler
 }
 
-func NewServer(cfg *config.Config, log *logger.Logger, h Handlers) *Server {
+func NewServer(cfg *config.Config, log *logger.Logger, tokens *jwt.TokenManager, h Handlers) *Server {
 	app := fiber.New(fiber.Config{
 		AppName:               cfg.App.Name,
 		ReadTimeout:           cfg.HTTP.ReadTimeout,
@@ -58,8 +60,12 @@ func NewServer(cfg *config.Config, log *logger.Logger, h Handlers) *Server {
 
 	api := app.Group("/api/v1")
 
-	// Public: the tracker sends a few events per minute per visitor.
+	// Public: the tracker sends a few events per minute per visitor; login is brute-force bait.
 	api.Post("/analytics/event", rateLimit(240, time.Minute), h.Event.Track)
+	api.Post("/auth/login", rateLimit(5, time.Minute), h.Auth.Login)
+
+	auth := middleware.JWTAuth(tokens)
+	api.Post("/auth/logout", auth, h.Auth.Logout)
 
 	return &Server{app: app, cfg: cfg, log: log}
 }
