@@ -29,8 +29,9 @@ type Server struct {
 }
 
 type Handlers struct {
-	Auth  *handler.AuthHandler
-	Event *handler.EventHandler
+	Auth      *handler.AuthHandler
+	Event     *handler.EventHandler
+	Analytics *handler.AnalyticsHandler
 }
 
 func NewServer(cfg *config.Config, log *logger.Logger, tokens *jwt.TokenManager, h Handlers) *Server {
@@ -66,6 +67,14 @@ func NewServer(cfg *config.Config, log *logger.Logger, tokens *jwt.TokenManager,
 
 	auth := middleware.JWTAuth(tokens)
 	api.Post("/auth/logout", auth, h.Auth.Logout)
+
+	// Admin panel (contract: client/docs/ANALYTICS_API.md).
+	analytics := api.Group("/admin/analytics", auth)
+	analytics.Get("/overview", h.Analytics.Overview)
+	analytics.Get("/live", h.Analytics.Live)
+	analytics.Get("/sessions", h.Analytics.Sessions)
+	analytics.Get("/sessions/:id", h.Analytics.Session)
+	analytics.Get("/export.csv", h.Analytics.ExportCSV)
 
 	return &Server{app: app, cfg: cfg, log: log}
 }

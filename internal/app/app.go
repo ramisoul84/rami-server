@@ -73,12 +73,14 @@ func New(cfg *config.Config) (*App, error) {
 	}
 
 	eventRepo := repository.NewEventRepository(db.DB)
+	analyticsService := service.NewAnalyticsService(repository.NewAnalyticsRepository(db.DB), log)
 	authService := service.NewAuthService(tokens, cfg.Auth.AdminUsername, cfg.Auth.AdminPasswordHash, log)
 
 	a := &App{log: log, db: db, geo: geo}
 	a.server = transporthttp.NewServer(cfg, log, tokens, transporthttp.Handlers{
-		Auth:  handler.NewAuthHandler(authService),
-		Event: handler.NewEventHandler(service.NewEventService(eventRepo, nil, geo, log)),
+		Auth:      handler.NewAuthHandler(authService),
+		Event:     handler.NewEventHandler(service.NewEventService(eventRepo, nil, geo, log)),
+		Analytics: handler.NewAnalyticsHandler(analyticsService),
 	})
 	return a, nil
 }
