@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ramisoul84/rami-server/internal/config"
+	"github.com/ramisoul84/rami-server/internal/notifier"
 	"github.com/ramisoul84/rami-server/internal/repository"
 	"github.com/ramisoul84/rami-server/internal/service"
 	transporthttp "github.com/ramisoul84/rami-server/internal/transport/http"
@@ -22,6 +23,7 @@ type App struct {
 	db     *database.Postgres
 	geo    service.GeoService
 	server *transporthttp.Server
+	bot    notifier.Runnable // nil when Telegram is not configured
 }
 
 func New(cfg *config.Config) (*App, error) {
@@ -72,14 +74,42 @@ func New(cfg *config.Config) (*App, error) {
 		}
 	}
 
+	// Times in bot messages and the digest schedule follow the DB timezone (validated in config).
+	loc, _ := time.LoadLocation(cfg.DB.Timezone)
+
 	eventRepo := repository.NewEventRepository(db.DB)
 	analyticsService := service.NewAnalyticsService(repository.NewAnalyticsRepository(db.DB), log)
 	authService := service.NewAuthService(tokens, cfg.Auth.AdminUsername, cfg.Auth.AdminPasswordHash, log)
 
+	bot, err := notifier.NewTelegramNotifier(
+		notifier.TelegramConfig{
+			BotToken:   cfg.Telegram.BotToken,
+			Admins:     cfg.Telegram.Admins,
+			SiteURL:    cfg.Telegram.SiteURL,
+			DigestHour: cfg.Telegram.DigestHour,
+			Location:   loc,
+		},
+		log,
+		analyticsService,
+		repository.NewTelegramRepository(db.DB),
+	)
+	if err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("notifier: %w", err)
+	}
+
 	a := &App{log: log, db: db, geo: geo}
+	var visitNotifier service.VisitNotifier
+	if bot.Enabled() {
+		visitNotifier, a.bot = bot, bot
+		log.Info("telegram bot enabled", "admins", len(cfg.Telegram.Admins))
+	} else {
+		log.Warn("telegram bot disabled: TELEGRAM_BOT_TOKEN is empty")
+	}
+
 	a.server = transporthttp.NewServer(cfg, log, tokens, transporthttp.Handlers{
 		Auth:      handler.NewAuthHandler(authService),
-		Event:     handler.NewEventHandler(service.NewEventService(eventRepo, nil, geo, log)),
+		Event:     handler.NewEventHandler(service.NewEventService(eventRepo, visitNotifier, geo, log)),
 		Analytics: handler.NewAnalyticsHandler(analyticsService),
 	})
 	return a, nil
@@ -92,6 +122,14 @@ func (a *App) Start(ctx context.Context) error {
 			errCh <- err
 		}
 	}()
+
+	if a.bot != nil {
+		go func() {
+			if err := a.bot.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+				a.log.Error("telegram bot stopped", "err", err)
+			}
+		}()
+	}
 
 	select {
 	case <-ctx.Done():
