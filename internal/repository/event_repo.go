@@ -23,6 +23,7 @@ type EventRepository interface {
 	GetRecentVisits(ctx context.Context, limit int) ([]domain.Visit, error)
 	GetLiveVisitors(ctx context.Context, windowSeconds int) (int64, error)
 	ExportEvents(ctx context.Context, dateRange domain.DateRange, limit int) ([]domain.ExportRow, error)
+	GetTopSections(ctx context.Context, dateRange domain.DateRange, limit int) ([]domain.SectionStat, error)
 }
 
 type eventRepository struct {
@@ -299,4 +300,32 @@ func (r *eventRepository) ExportEvents(ctx context.Context, dateRange domain.Dat
 		return nil, fmt.Errorf("repo: export events: %w", err)
 	}
 	return rows, nil
+}
+
+func (r *eventRepository) GetTopSections(ctx context.Context, dateRange domain.DateRange, limit int) ([]domain.SectionStat, error) {
+	query := `
+		SELECT section, COUNT(*) AS count
+		FROM events
+		WHERE event_type = 'section_view'
+		  AND section IS NOT NULL
+		  AND section != ''
+	`
+	args := []interface{}{}
+
+	if !dateRange.IsZero() {
+		query += ` AND created_at >= $1 AND created_at < $2`
+		args = append(args, dateRange.From, dateRange.To.Add(24*time.Hour))
+	}
+
+	query += fmt.Sprintf(`
+		GROUP BY section
+		ORDER BY count DESC
+		LIMIT %d
+	`, limit)
+
+	var stats []domain.SectionStat
+	if err := r.db.SelectContext(ctx, &stats, query, args...); err != nil {
+		return nil, fmt.Errorf("repo: top sections: %w", err)
+	}
+	return stats, nil
 }

@@ -50,10 +50,10 @@ RUN mkdir -p /app/logs && chown -R app:app /app
 
 USER app
 
-EXPOSE 8080
+EXPOSE 8000
 
 # Health check — hits the /health endpoint every 30s
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-    CMD wget -qO- http://localhost:8080/health || exit 1
+    CMD wget -qO- http://localhost:8000/health || exit 1
 
 ENTRYPOINT ["/app/server"]

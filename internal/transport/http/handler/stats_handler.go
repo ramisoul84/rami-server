@@ -124,6 +124,20 @@ func (h *StatsHandler) ExportCSV(c *fiber.Ctx) error {
 	return nil
 }
 
+func (h *StatsHandler) TopSections(c *fiber.Ctx) error {
+	dateRange, err := parseDateRange(c)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+
+	limit := c.QueryInt("limit", 20)
+	sections, err := h.stats.TopSections(c.Context(), dateRange, limit)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to load sections")
+	}
+	return c.JSON(fiber.Map{"sections": sections})
+}
+
 // ---------------------------------------------------------------------------
 // HELPERS
 // ---------------------------------------------------------------------------

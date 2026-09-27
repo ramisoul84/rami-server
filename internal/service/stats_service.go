@@ -18,6 +18,7 @@ type StatsService interface {
 	TopCountries(ctx context.Context, dateRange domain.DateRange, limit int) ([]domain.CountryStat, error)
 	LiveVisitors(ctx context.Context) (int64, error)
 	ExportRows(ctx context.Context, dateRange domain.DateRange) ([]domain.ExportRow, error)
+	TopSections(ctx context.Context, dateRange domain.DateRange, limit int) ([]domain.SectionStat, error)
 }
 
 type statsService struct {
@@ -50,11 +51,17 @@ func (s *statsService) Overview(ctx context.Context, dateRange domain.DateRange)
 	if err != nil {
 		return nil, fmt.Errorf("stats: visitors by day: %w", err)
 	}
+
+	sections, err := s.repo.GetTopSections(ctx, dateRange, 20)
+	if err != nil {
+		return nil, fmt.Errorf("stats: top sections: %w", err)
+	}
 	return &domain.DashboardStats{
 		Summary:       summary,
 		Today:         today,
 		TopPages:      pages,
 		TopReferrers:  referrers,
+		TopSections:   sections,
 		VisitorsByDay: byDay,
 	}, nil
 }
@@ -121,4 +128,12 @@ func clamp(v, min, max, fallback int) int {
 		return fallback
 	}
 	return v
+}
+
+func (s *statsService) TopSections(ctx context.Context, dateRange domain.DateRange, limit int) ([]domain.SectionStat, error) {
+	v, err := s.repo.GetTopSections(ctx, dateRange, clamp(limit, 1, 100, 20))
+	if err != nil {
+		return nil, fmt.Errorf("stats: top sections: %w", err)
+	}
+	return v, nil
 }

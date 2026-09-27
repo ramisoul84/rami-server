@@ -3,16 +3,19 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    container_name: rami-server
     restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
     env_file:
-      - .env                    # <-- secrets + general config
+      - .env
     ports:
-      - "8080:8080"
+      - "8000:8000"
     volumes:
       - ./data:/app/data:ro
       - ./logs:/app/logs
     networks:
       - platform-stack_backend
+
+networks:
+  platform-stack_backend:
+    external: true
+    name: platform-stack_backend

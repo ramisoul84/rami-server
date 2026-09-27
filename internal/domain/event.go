@@ -112,7 +112,8 @@ type DashboardStats struct {
 	Today         *DayStat       `json:"today"`
 	TopPages      []PageStat     `json:"top_pages"`
 	TopReferrers  []ReferrerStat `json:"top_referrers"`
-	VisitorsByDay []DayStat      `json:"visitors_by_day"`
+	TopSections   []SectionStat
+	VisitorsByDay []DayStat `json:"visitors_by_day"`
 }
 
 // DateRange represents a filterable window. Zero value means "no filter".
@@ -139,4 +140,9 @@ type ExportRow struct {
 	UserAgent          string    `db:"user_agent"`
 	TimeSpentSeconds   *int      `db:"time_spent_seconds"`
 	EngagedTimeSeconds *int      `db:"engaged_time_seconds"`
+}
+
+type SectionStat struct {
+	Section string `db:"section" json:"section"`
+	Count   int64  `db:"count" json:"count"`
 }

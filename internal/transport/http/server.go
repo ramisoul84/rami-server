@@ -98,6 +98,7 @@ func (s *Server) registerRoutes() {
 	admin.Get("/stats/countries", s.statsHandler.TopCountries)
 	admin.Get("/visits/recent", s.statsHandler.RecentVisits)
 	admin.Get("/export.csv", s.statsHandler.ExportCSV)
+	admin.Get("/stats/sections", s.statsHandler.TopSections)
 }
 
 func (s *Server) healthCheck(c *fiber.Ctx) error {
