@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mssola/useragent"
 	"github.com/ramisoul84/rami-server/internal/domain"
 	"github.com/ramisoul84/rami-server/internal/repository"
 	"github.com/ramisoul84/rami-server/pkg/logger"
@@ -83,6 +84,8 @@ func (s *eventService) notifyVisit(event *domain.IncomingEvent, ip, country, cit
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	os, browser, device := parseUserAgent(event.UserAgent)
+
 	payload := domain.VisitNotification{
 		SessionID:  event.SessionID,
 		IP:         ip,
@@ -94,7 +97,9 @@ func (s *eventService) notifyVisit(event *domain.IncomingEvent, ip, country, cit
 		Language:   event.Language,
 		Timezone:   event.Timezone,
 		Viewport:   event.Viewport,
-		Device:     detectDevice(event.UserAgent),
+		Device:     device,
+		OS:         os,      // new
+		Browser:    browser, // new
 		UserAgent:  event.UserAgent,
 		OccurredAt: time.Now().UnixMilli(),
 	}
@@ -105,6 +110,48 @@ func (s *eventService) notifyVisit(event *domain.IncomingEvent, ip, country, cit
 			"session_id", event.SessionID,
 		)
 	}
+}
+
+// parseUserAgent extracts OS, browser, and device type from a UA string.
+func parseUserAgent(ua string) (os string, browser string, device string) {
+	u := useragent.New(ua)
+
+	// OS
+	switch {
+	case u.OSInfo().Name != "":
+		os = u.OSInfo().Name
+		if u.OSInfo().Version != "" {
+			os += " " + u.OSInfo().Version
+		}
+	default:
+		os = "Unknown"
+	}
+
+	// Browser
+	browserName, browserVersion := u.Browser()
+	if browserName != "" {
+		browser = browserName
+		if browserVersion != "" {
+			// Keep only major version
+			if idx := len(browserVersion); idx > 0 {
+				parts := strings.SplitN(browserVersion, ".", 2)
+				browser += " " + parts[0]
+			}
+		}
+	} else {
+		browser = "Unknown"
+	}
+
+	// Device
+	device = "desktop"
+	if u.Mobile() || u.Bot() == false && u.Mobile() {
+		device = "mobile"
+	}
+	if u.Bot() {
+		device = "bot"
+	}
+
+	return os, browser, device
 }
 
 func toEventRow(in *domain.IncomingEvent, ip string) *domain.Event {

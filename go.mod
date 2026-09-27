@@ -10,6 +10,7 @@ require (
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.12.3
+	github.com/mssola/useragent v1.0.0
 	github.com/oschwald/geoip2-golang v1.13.0
 	golang.org/x/crypto v0.14.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1

@@ -14,6 +14,8 @@ type VisitNotification struct {
 	Timezone   string
 	Viewport   string
 	Device     string
+	OS         string
+	Browser    string
 	UserAgent  string
 	OccurredAt int64
 }

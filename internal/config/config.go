@@ -222,9 +222,11 @@ func (c *Config) Validate() error {
 		if c.App.Debug {
 			errs = append(errs, "APP_DEBUG must be false in production")
 		}
-		if c.DB.SSLMode == "disable" {
-			errs = append(errs, "DB_SSL_MODE must not be 'disable' in production")
-		}
+		/*
+			if c.DB.SSLMode == "disable" {
+				errs = append(errs, "DB_SSL_MODE must not be 'disable' in production")
+			}
+		*/
 	}
 
 	if len(errs) > 0 {

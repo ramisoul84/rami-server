@@ -9,72 +9,106 @@ import (
 	"github.com/ramisoul84/rami-server/internal/domain"
 )
 
-// formatVisit renders a single visit notification.
+// ---------------------------------------------------------------------------
+// VISIT NOTIFICATION
+// ---------------------------------------------------------------------------
+
+// formatVisit renders a visit notification with a compact, readable layout.
 //
-// Layout:
+// Example output:
 //
 //	👀 New visit
 //
-//	/  · Rami Suliman — Home
-//	🌐 127.0.0.1  ·  Local
-//	💻 desktop  ·  1366×651
-//	🔗 direct  ·  18:50:06
+//	/projects/bristol — Case study
+//
+//	🌍 Amsterdam, NL · 143.92.44.18
+//	📱 iOS 17 · Safari 17 · mobile · 390×844
+//	🔗 google.com
+//	🕐 14:22:08 · 27 Sep
 func formatVisit(v domain.VisitNotification) string {
 	var b strings.Builder
 
-	// Header
 	b.WriteString("👀 <b>New visit</b>\n\n")
 
-	// Page title (bold) + path
+	// Page — path bold, optional title after an em-dash
 	page := v.Page
 	if page == "" {
 		page = "/"
 	}
 	b.WriteString(fmt.Sprintf("<b>%s</b>", html.EscapeString(page)))
 	if v.PageTitle != "" && v.PageTitle != page {
-		b.WriteString(fmt.Sprintf("\n<i>%s</i>", html.EscapeString(v.PageTitle)))
+		b.WriteString(fmt.Sprintf(" — %s", html.EscapeString(v.PageTitle)))
 	}
 	b.WriteString("\n\n")
 
-	// Meta lines — one fact per line, aligned by icon
+	// Location + IP — combined into one line
 	if loc := formatLocation(v.Country, v.City); loc != "" {
-		b.WriteString(fmt.Sprintf("🌐 %s  ·  %s\n",
-			html.EscapeString(v.IP),
+		b.WriteString(fmt.Sprintf("🌍 %s · <code>%s</code>\n",
 			html.EscapeString(loc),
+			html.EscapeString(v.IP),
 		))
 	} else if v.IP != "" {
-		b.WriteString(fmt.Sprintf("🌐 %s\n", html.EscapeString(v.IP)))
+		b.WriteString(fmt.Sprintf("🌐 <code>%s</code>\n", html.EscapeString(v.IP)))
 	}
 
-	if v.Device != "" {
-		device := v.Device
-		if v.Viewport != "" {
-			device += "  ·  " + v.Viewport
-		}
-		b.WriteString(fmt.Sprintf("%s %s\n", deviceIcon(v.Device), html.EscapeString(device)))
+	// Device stack: OS · Browser · device type · viewport
+	if line := formatDeviceLine(v); line != "" {
+		b.WriteString(line)
 	}
 
-	if v.Referrer != "" {
-		b.WriteString(fmt.Sprintf("🔁 %s\n", html.EscapeString(shortReferrer(v.Referrer))))
-	} else {
-		b.WriteString("🔁 direct\n")
+	// Referrer — "direct" if empty
+	ref := v.Referrer
+	if strings.TrimSpace(ref) == "" {
+		ref = "direct"
 	}
+	b.WriteString(fmt.Sprintf("🔗 %s\n", html.EscapeString(shortReferrer(ref))))
 
-	b.WriteString(fmt.Sprintf("🕐 %s\n",
+	// Time
+	b.WriteString(fmt.Sprintf("🕐 %s",
 		time.UnixMilli(v.OccurredAt).Format("15:04:05 · 02 Jan")))
 
 	return b.String()
 }
 
-// formatStats renders the stats summary.
+// formatDeviceLine builds the "OS · Browser · device · viewport" line.
+// Returns an empty string if there's nothing to show.
+func formatDeviceLine(v domain.VisitNotification) string {
+	parts := make([]string, 0, 4)
+
+	if v.OS != "" && v.OS != "Unknown" {
+		parts = append(parts, v.OS)
+	}
+	if v.Browser != "" && v.Browser != "Unknown" {
+		parts = append(parts, v.Browser)
+	}
+	if v.Device != "" {
+		parts = append(parts, v.Device)
+	}
+	if v.Viewport != "" {
+		parts = append(parts, v.Viewport)
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
+
+	return fmt.Sprintf("%s %s\n",
+		deviceIcon(v.Device),
+		html.EscapeString(strings.Join(parts, " · ")),
+	)
+}
+
+// ---------------------------------------------------------------------------
+// STATS
+// ---------------------------------------------------------------------------
+
+// formatStats renders the /stats reply.
 func formatStats(s *domain.DashboardStats) string {
 	if s == nil {
 		return "No stats available."
 	}
 
 	var b strings.Builder
-
-	// Header
 	b.WriteString("📊 <b>Site analytics</b>\n\n")
 
 	if s.Summary != nil {
@@ -99,10 +133,10 @@ func formatStats(s *domain.DashboardStats) string {
 		for _, d := range s.VisitorsByDay {
 			total30 += d.Visitors
 		}
-		b.WriteString(fmt.Sprintf("🗓  <b>%s</b>  last 30 days\n", formatNumber(total30)))
+		b.WriteString(fmt.Sprintf("🗓  <b>%s</b>  last 30 days\n",
+			formatNumber(total30)))
 	}
 
-	// Top pages
 	if len(s.TopPages) > 0 {
 		b.WriteString("\n<b>Top pages</b>\n")
 		for i, p := range s.TopPages {
@@ -110,10 +144,7 @@ func formatStats(s *domain.DashboardStats) string {
 			if page == "" {
 				page = "/"
 			}
-			// Give the path a fixed visual width; truncate long ones
-			if len(page) > 40 {
-				page = page[:37] + "..."
-			}
+			page = truncate(page, 40)
 			b.WriteString(fmt.Sprintf(
 				"<code>%d.</code>  %s  —  <b>%s</b>\n",
 				i+1,
@@ -126,7 +157,11 @@ func formatStats(s *domain.DashboardStats) string {
 	return b.String()
 }
 
-// formatVisits renders the recent-visits reply.
+// ---------------------------------------------------------------------------
+// RECENT VISITS
+// ---------------------------------------------------------------------------
+
+// formatVisits renders the /visits reply.
 func formatVisits(visits []domain.Visit) string {
 	if len(visits) == 0 {
 		return "No visits yet."
@@ -140,13 +175,11 @@ func formatVisits(visits []domain.Visit) string {
 		if page == "" {
 			page = "/"
 		}
-		if len(page) > 40 {
-			page = page[:37] + "..."
-		}
+		page = truncate(page, 40)
 
 		b.WriteString(fmt.Sprintf("<b>%s</b>\n", html.EscapeString(page)))
 
-		meta := []string{}
+		meta := make([]string, 0, 3)
 		if loc := formatLocation(v.Country, v.City); loc != "" {
 			meta = append(meta, loc)
 		}
@@ -163,10 +196,15 @@ func formatVisits(visits []domain.Visit) string {
 }
 
 // ---------------------------------------------------------------------------
-// HELPERS
+// SHARED HELPERS
 // ---------------------------------------------------------------------------
 
+// formatLocation builds "City, Country" from its parts.
+// Handles the case where only one of the two is present.
 func formatLocation(country, city string) string {
+	country = strings.TrimSpace(country)
+	city = strings.TrimSpace(city)
+
 	switch {
 	case country == "" && city == "":
 		return ""
@@ -175,47 +213,73 @@ func formatLocation(country, city string) string {
 	case country == "":
 		return city
 	default:
-		return country + " · " + city
+		return city + ", " + country
 	}
 }
 
+// shortReferrer trims the protocol, trailing slash, and truncates long URLs.
 func shortReferrer(ref string) string {
 	if ref == "" {
 		return "direct"
 	}
-	// Strip protocol
 	ref = strings.TrimPrefix(ref, "https://")
 	ref = strings.TrimPrefix(ref, "http://")
-	// Strip trailing slash
+	ref = strings.TrimPrefix(ref, "www.")
 	ref = strings.TrimSuffix(ref, "/")
-	// Truncate
-	if len(ref) > 50 {
-		ref = ref[:47] + "..."
-	}
-	return ref
+	return truncate(ref, 50)
 }
 
+// deviceIcon picks the emoji for a device type.
 func deviceIcon(device string) string {
 	switch strings.ToLower(device) {
 	case "mobile":
+		return "📱"
+	case "bot":
+		return "🤖"
+	case "tablet":
 		return "📱"
 	default:
 		return "💻"
 	}
 }
 
-func formatNumber(n int64) string {
-	// Simple thousands separator using a string reverse approach.
-	// 1234 → "1 234"
-	s := fmt.Sprintf("%d", n)
-	if len(s) <= 3 {
+// truncate shortens a string to max length, adding an ellipsis if cut.
+func truncate(s string, max int) string {
+	if len(s) <= max {
 		return s
 	}
+	if max <= 3 {
+		return s[:max]
+	}
+	return s[:max-3] + "..."
+}
+
+// formatNumber adds a thin space as a thousands separator.
+// Example: 1234567 → "1 234 567"
+func formatNumber(n int64) string {
+	negative := n < 0
+	if negative {
+		n = -n
+	}
+
+	s := fmt.Sprintf("%d", n)
+	if len(s) <= 3 {
+		if negative {
+			return "-" + s
+		}
+		return s
+	}
+
 	var parts []string
 	for len(s) > 3 {
 		parts = append([]string{s[len(s)-3:]}, parts...)
 		s = s[:len(s)-3]
 	}
 	parts = append([]string{s}, parts...)
-	return strings.Join(parts, " ")
+
+	result := strings.Join(parts, " ")
+	if negative {
+		return "-" + result
+	}
+	return result
 }
